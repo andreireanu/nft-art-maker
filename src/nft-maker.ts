@@ -128,14 +128,55 @@ export const getElements = (path: string) => {
     });
 };
 
+ 
+export const getWeights = (path: string) => {
+  let weightArray =  fs
+    .readdirSync(path)
+    .filter((item) => !/(^|\/)\.[^/.]/g.test(item))
+    .map((i) => {
+      return getRarityWeight(i);
+    });
+  return weightArray;
+};
+
+export const getSumWeights = (path: string) => {
+  let weightArray =  fs
+    .readdirSync(path)
+    .filter((item) => !/(^|\/)\.[^/.]/g.test(item))
+    .map((i) => {
+      return getRarityWeight(i);
+    });
+  let sumArray = weightArray.reduce((a, b) => a + b, 0);  
+  return sumArray;
+}; 
+
+export const getOccurancies = (path: string) => {
+  let weightArray =  fs
+    .readdirSync(path)
+    .filter((item) => !/(^|\/)\.[^/.]/g.test(item))
+    .map((i) => {
+      return getRarityWeight(i);
+    });
+  let sumArray = weightArray.reduce((a, b) => a + b, 0); 
+  let occuranciesArray =  fs
+    .readdirSync(path)
+    .filter((item) => !/(^|\/)\.[^/.]/g.test(item))
+    .map((i, index) => {
+      return (getRarityWeight(i) / sumArray) * layerConfigurations[0].growEditionSizeTo;
+    });    
+  return occuranciesArray;
+}; 
+
 const layersSetup = (layersOrder: { name: string; opacity?: number }[]) => {
   const layers = layersOrder.map((layerObj, index) => ({
     id: index,
     name: layerObj.name,
     elements: getElements(`${layersDir}/${layerObj.name}/`),
     opacity: layerObj['opacity'] != undefined ? layerObj['opacity'] : 1,
-    // add occurrences so we get the exact defined percentages
-    occurrences: Array<number>(getElements(`${layersDir}/${layerObj.name}/`).length).fill(0),
+    // add weights so we get the exact defined percentages
+    weights: getWeights(`${layersDir}/${layerObj.name}/`),
+    sum: getSumWeights(`${layersDir}/${layerObj.name}/`),
+    occurancies: getOccurancies(`${layersDir}/${layerObj.name}/`),
   }));
   console.log(layers);
   return layers;
@@ -146,7 +187,7 @@ const saveImage = (_editionCount: number) => {
     `${buildDir}/${outputImagesDirName}/${_editionCount}.png`,
     canvas.toBuffer('image/png')
   );
-  console.log('Wrote ' + _editionCount + ".png");
+  // console.log('Wrote ' + _editionCount + ".png");
 };
 
 const addMetadata = (_dna: string[], _edition: number) => {
@@ -257,16 +298,16 @@ const createDna = (_layers: Layer[]) => {
     });
     // number between 0 - totalWeight
     let random = Math.floor(Math.random() * totalWeight);
-    console.log('random ' + random);
+    // console.log('random ' + random);
     for (let i = 0; i < layer.elements.length; i++) {
       // subtract the current weight from the random weight until we reach a sub zero value.
       random -= layer.elements[i].weight;
-      console.log(layer.elements[i].id.toString() + ' : ' + random);
+      // console.log(layer.elements[i].id.toString() + ' : ' + random);
       if (random < 0) {
         let temp = randNum.push(
           `${layer.elements[i].id}:${layer.elements[i].filename}`
         );
-        console.log(randNum);
+        // console.log(randNum);
         return temp;
       }
     }
@@ -349,9 +390,9 @@ export const startCreating = async () => {
         newDna.forEach((element, index) => {
           let endSlice = Number(element.indexOf(":"));
           let idx = Number(element.slice(0, endSlice));
-          console.log(idx);
-          console.log(index);
-          console.log(layers[index].occurrences[idx] += 1 );
+          // console.log(idx);
+          // console.log(index);
+          // console.log(layers[index].weights[idx] += 1 );
         });
 
 
@@ -401,7 +442,6 @@ export const startCreating = async () => {
       }
     }
     layerConfigIndex++;
-    console.log(layers);
   }
 
   console.log('Finished! Check out the output directory.');
