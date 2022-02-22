@@ -20,6 +20,9 @@ interface Layer {
   name: string;
   elements: LayerElement[];
   opacity: number;
+  weights: Number[] ,
+  sum: number,
+  occurancies: Number[] 
 }
 
 interface TempMetadata {
@@ -130,13 +133,12 @@ export const getElements = (path: string) => {
 
  
 export const getWeights = (path: string) => {
-  let weightArray =  fs
+  return fs
     .readdirSync(path)
     .filter((item) => !/(^|\/)\.[^/.]/g.test(item))
     .map((i) => {
       return getRarityWeight(i);
     });
-  return weightArray;
 };
 
 export const getSumWeights = (path: string) => {
@@ -175,10 +177,11 @@ const layersSetup = (layersOrder: { name: string; opacity?: number }[]) => {
     opacity: layerObj['opacity'] != undefined ? layerObj['opacity'] : 1,
     // add weights so we get the exact defined percentages
     weights: getWeights(`${layersDir}/${layerObj.name}/`),
+    // add layer weights sum
     sum: getSumWeights(`${layersDir}/${layerObj.name}/`),
+    // add desired occurancies for each png
     occurancies: getOccurancies(`${layersDir}/${layerObj.name}/`),
   }));
-  console.log(layers);
   return layers;
 };
 
@@ -187,7 +190,6 @@ const saveImage = (_editionCount: number) => {
     `${buildDir}/${outputImagesDirName}/${_editionCount}.png`,
     canvas.toBuffer('image/png')
   );
-  // console.log('Wrote ' + _editionCount + ".png");
 };
 
 const addMetadata = (_dna: string[], _edition: number) => {
@@ -226,7 +228,6 @@ const addMetadata = (_dna: string[], _edition: number) => {
   };
 
   metadataList.push(tempMetadata);
-
   attributesList = [];
 };
 
@@ -293,24 +294,32 @@ const createDna = (_layers: Layer[]) => {
   const randNum: string[] = [];
   _layers.forEach((layer) => {
     let totalWeight = 0;
-    layer.elements.forEach((element) => {
-      totalWeight += element.weight;
+    layer.weights.forEach((weight, index) => {
+      if (layer.occurancies[index] > 0) totalWeight = Number(totalWeight) + Number(weight);
     });
-    // number between 0 - totalWeight
     let random = Math.floor(Math.random() * totalWeight);
-    // console.log('random ' + random);
-    for (let i = 0; i < layer.elements.length; i++) {
-      // subtract the current weight from the random weight until we reach a sub zero value.
-      random -= layer.elements[i].weight;
-      // console.log(layer.elements[i].id.toString() + ' : ' + random);
-      if (random < 0) {
-        let temp = randNum.push(
-          `${layer.elements[i].id}:${layer.elements[i].filename}`
-        );
-        // console.log(randNum);
-        return temp;
-      }
+    let i = 0;
+    let runningWeight = 0;
+    let previousRunningWeight = 0;
+    // random variable gets added the weight of the element that has surpassed
+    // desired occurancies so that it doesn't get selected 
+    for (var index in layer.weights) {
+        if (layer.occurancies[index] == 0) random += Number(layer.weights[index]);
+        runningWeight +=  Number(layer.weights[index]);
+        if (previousRunningWeight <= random && random < runningWeight) 
+        {
+          i =  Number(index);
+          break;
+        }
+        else 
+        {
+          previousRunningWeight = runningWeight;
+        }
     }
+    let temp = randNum.push(
+      `${layer.elements[i].id}:${layer.elements[i].filename}`
+    );
+    return temp;
   });
   return randNum;
 };
@@ -326,7 +335,6 @@ const getProvenanceHash = () => {
     .map((metadataObj) => metadataObj.image.hash)
     .join('');
   hash.update(hashes);
-
   return hash.digest('hex');
 };
 
@@ -386,16 +394,12 @@ export const startCreating = async () => {
     ) {
       const newDna = createDna(layers);
       if (isDnaUnique(dnaList, newDna)) {
-        // increment png index to eliminate is from being chosen random
+        // decrement png index  
         newDna.forEach((element, index) => {
           let endSlice = Number(element.indexOf(":"));
           let idx = Number(element.slice(0, endSlice));
-          // console.log(idx);
-          // console.log(index);
-          // console.log(layers[index].weights[idx] += 1 );
+          layers[index].occurancies[idx] -= 1;
         });
-
-
         const results = constructLayerToDna(newDna, layers);
         const loadedElements: Promise<{
           layer: {
